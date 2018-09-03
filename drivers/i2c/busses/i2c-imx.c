@@ -96,7 +96,7 @@
  * Duplicated divider values removed from list
  */
 
-static u16 __initdata i2c_clk_div[50][2] = {
+static u16 i2c_clk_div[50][2] = {
 	{ 22,	0x20 }, { 24,	0x21 }, { 26,	0x22 }, { 28,	0x23 },
 	{ 30,	0x00 },	{ 32,	0x24 }, { 36,	0x25 }, { 40,	0x26 },
 	{ 42,	0x03 }, { 44,	0x27 },	{ 48,	0x28 }, { 52,	0x05 },
@@ -123,6 +123,7 @@ struct imx_i2c_struct {
 	unsigned int 		disable_delay;
 	int			stopped;
 	unsigned int		ifdr; /* IMX_I2C_IFDR */
+	unsigned int		cur_clk;
 };
 
 /** Functions for IMX I2C adapter driver ***************************************
@@ -132,6 +133,10 @@ static int i2c_imx_bus_busy(struct imx_i2c_struct *i2c_imx, int for_busy)
 {
 	unsigned long orig_jiffies = jiffies;
 	unsigned int temp;
+	int iIntRetryCnt=0;
+
+	if (in_atomic() || in_interrupt())
+		iIntRetryCnt++;
 
 	dev_dbg(&i2c_imx->adapter.dev, "<%s>\n", __func__);
 
@@ -141,10 +146,14 @@ static int i2c_imx_bus_busy(struct imx_i2c_struct *i2c_imx, int for_busy)
 			break;
 		if (!for_busy && !(temp & I2SR_IBB))
 			break;
-		if (signal_pending(current)) {
+		if (fatal_signal_pending(current)) {
 			dev_dbg(&i2c_imx->adapter.dev,
 				"<%s> I2C Interrupted\n", __func__);
 			return -EINTR;
+		}
+		if (iIntRetryCnt &&(5000>iIntRetryCnt++)) {
+			udelay(100);
+			continue;
 		}
 		if (time_after(jiffies, orig_jiffies + msecs_to_jiffies(500))) {
 			dev_dbg(&i2c_imx->adapter.dev,
@@ -159,10 +168,23 @@ static int i2c_imx_bus_busy(struct imx_i2c_struct *i2c_imx, int for_busy)
 
 static int i2c_imx_trx_complete(struct imx_i2c_struct *i2c_imx)
 {
-	wait_event_timeout(i2c_imx->queue, i2c_imx->i2csr & I2SR_IIF, HZ / 10);
+	if (in_atomic() || in_interrupt()) {
+		int iIntRetryCnt=0;
+		udelay (1000);
+		i2c_imx->i2csr |= readb(i2c_imx->base + IMX_I2C_I2SR);
+		while (!(i2c_imx->i2csr & I2SR_IIF)) {
+			if (5000 < iIntRetryCnt++)
+				break;
+			udelay (100);
+			i2c_imx->i2csr |= readb(i2c_imx->base + IMX_I2C_I2SR);
+		}
+	}
+	else
+		wait_event_timeout(i2c_imx->queue, i2c_imx->i2csr & I2SR_IIF, HZ / 10);
 
 	if (unlikely(!(i2c_imx->i2csr & I2SR_IIF))) {
 		dev_dbg(&i2c_imx->adapter.dev, "<%s> Timeout\n", __func__);
+		printk ("<%s> Timeout\n", __func__);
 		return -ETIMEDOUT;
 	}
 	dev_dbg(&i2c_imx->adapter.dev, "<%s> TRX complete\n", __func__);
@@ -181,12 +203,72 @@ static int i2c_imx_acked(struct imx_i2c_struct *i2c_imx)
 	return 0;
 }
 
+extern int _ntx_get_wifi_power_status(void);
+static void i2c_imx_set_clk(struct imx_i2c_struct *i2c_imx,
+							unsigned int rate)
+{
+	unsigned int i2c_clk_rate;
+	unsigned int div;
+	int i;
+
+	if (400000==rate && _ntx_get_wifi_power_status()) {
+		rate = 100000;
+	}
+
+	/* Divider value calculation */
+	i2c_clk_rate = clk_get_rate(i2c_imx->clk);
+	if (i2c_imx->cur_clk == rate)
+		return;
+	else
+		i2c_imx->cur_clk = rate;
+	div = (i2c_clk_rate + rate - 1) / rate;
+	if (div < i2c_clk_div[0][0])
+		i = 0;
+	else if (div > i2c_clk_div[ARRAY_SIZE(i2c_clk_div) - 1][0])
+		i = ARRAY_SIZE(i2c_clk_div) - 1;
+	else
+		for (i = 0; i2c_clk_div[i][0] < div; i++)
+			;
+
+	/* Store divider value */
+	i2c_imx->ifdr = i2c_clk_div[i][1];
+
+	/*
+	 * There dummy delay is calculated.
+	 * It should be about one I2C clock period long.
+	 * This delay is used in I2C bus disable function
+	 * to fix chip hardware bug.
+	 */
+	i2c_imx->disable_delay = (500000U * i2c_clk_div[i][0]
+		+ (i2c_clk_rate / 2) - 1) / (i2c_clk_rate / 2);
+
+	/* dev_dbg() can't be used, because adapter is not yet registered */
+#ifdef CONFIG_I2C_DEBUG_BUS
+	printk(KERN_DEBUG "I2C: <%s> I2C_CLK=%d, REQ DIV=%d\n",
+		__func__, i2c_clk_rate, div);
+	printk(KERN_DEBUG "I2C: <%s> IFDR[IC]=0x%x, REAL DIV=%d\n",
+		__func__, i2c_clk_div[i][1], i2c_clk_div[i][0]);
+#endif
+}
+
 static int i2c_imx_start(struct imx_i2c_struct *i2c_imx)
 {
 	unsigned int temp = 0;
+	struct imxi2c_platform_data *pdata;
 	int result;
 
 	dev_dbg(&i2c_imx->adapter.dev, "<%s>\n", __func__);
+
+	/* Currently on Arik/Rigel, the I2C clk is from IPG_PERCLK which is
+	 * sourced from IPG_CLK. In low bus freq mode, IPG_CLK is at 12MHz
+	 * and IPG_PERCLK is down to 4MHz.
+	 * Update I2C divider before set i2c clock.
+	 */
+	pdata = i2c_imx->adapter.dev.parent->platform_data;
+	if (pdata && pdata->bitrate)
+		i2c_imx_set_clk(i2c_imx, pdata->bitrate);
+	else
+		i2c_imx_set_clk(i2c_imx, IMX_I2C_BIT_RATE);
 
 	clk_enable(i2c_imx->clk);
 	writeb(i2c_imx->ifdr, i2c_imx->base + IMX_I2C_IFDR);
@@ -238,44 +320,6 @@ static void i2c_imx_stop(struct imx_i2c_struct *i2c_imx)
 	/* Disable I2C controller */
 	writeb(0, i2c_imx->base + IMX_I2C_I2CR);
 	clk_disable(i2c_imx->clk);
-}
-
-static void __init i2c_imx_set_clk(struct imx_i2c_struct *i2c_imx,
-							unsigned int rate)
-{
-	unsigned int i2c_clk_rate;
-	unsigned int div;
-	int i;
-
-	/* Divider value calculation */
-	i2c_clk_rate = clk_get_rate(i2c_imx->clk);
-	div = (i2c_clk_rate + rate - 1) / rate;
-	if (div < i2c_clk_div[0][0])
-		i = 0;
-	else if (div > i2c_clk_div[ARRAY_SIZE(i2c_clk_div) - 1][0])
-		i = ARRAY_SIZE(i2c_clk_div) - 1;
-	else
-		for (i = 0; i2c_clk_div[i][0] < div; i++);
-
-	/* Store divider value */
-	i2c_imx->ifdr = i2c_clk_div[i][1];
-
-	/*
-	 * There dummy delay is calculated.
-	 * It should be about one I2C clock period long.
-	 * This delay is used in I2C bus disable function
-	 * to fix chip hardware bug.
-	 */
-	i2c_imx->disable_delay = (500000U * i2c_clk_div[i][0]
-		+ (i2c_clk_rate / 2) - 1) / (i2c_clk_rate / 2);
-
-	/* dev_dbg() can't be used, because adapter is not yet registered */
-#ifdef CONFIG_I2C_DEBUG_BUS
-	printk(KERN_DEBUG "I2C: <%s> I2C_CLK=%d, REQ DIV=%d\n",
-		__func__, i2c_clk_rate, div);
-	printk(KERN_DEBUG "I2C: <%s> IFDR[IC]=0x%x, REAL DIV=%d\n",
-		__func__, i2c_clk_div[i][1], i2c_clk_div[i][0]);
-#endif
 }
 
 static irqreturn_t i2c_imx_isr(int irq, void *dev_id)

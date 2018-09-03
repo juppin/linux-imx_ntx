@@ -908,11 +908,13 @@ static int do_write(struct fsg_common *common)
 			curlun->sense_data = SS_INVALID_FIELD_IN_CDB;
 			return -EINVAL;
 		}
+#ifndef CONFIG_USB_ANDROID_MASS_STORAGE
 		if (!curlun->nofua && (common->cmnd[1] & 0x08)) { /* FUA */
 			spin_lock(&curlun->filp->f_lock);
 			curlun->filp->f_flags |= O_SYNC;
 			spin_unlock(&curlun->filp->f_lock);
 		}
+#endif
 	}
 	if (lba >= curlun->num_sectors) {
 		curlun->sense_data = SS_LOGICAL_BLOCK_ADDRESS_OUT_OF_RANGE;
@@ -3052,7 +3054,7 @@ static int fsg_bind_config(struct usb_composite_dev *cdev,
 	if (unlikely(!fsg))
 		return -ENOMEM;
 
-	fsg->function.name        = FSG_DRIVER_DESC;
+	fsg->function.name        = "mass_storage";
 	fsg->function.strings     = fsg_strings_array;
 	fsg->function.bind        = fsg_bind;
 	fsg->function.unbind      = fsg_unbind;
@@ -3098,6 +3100,12 @@ struct fsg_module_parameters {
 	unsigned int	nofua_count;
 	unsigned int	luns;	/* nluns */
 	int		stall;	/* can_stall */
+
+	unsigned short vendor,product ;
+	char *vendor_id,*product_id ;
+	char *desp_m,*desp_p ;
+	char *SN ;
+	char *manufacturer ;
 };
 
 #define _FSG_MODULE_PARAM_ARRAY(prefix, params, name, type, desc)	\
@@ -3125,7 +3133,24 @@ struct fsg_module_parameters {
 	_FSG_MODULE_PARAM(prefix, params, luns, uint,			\
 			  "number of LUNs");				\
 	_FSG_MODULE_PARAM(prefix, params, stall, bool,			\
-			  "false to prevent bulk stalls")
+			  "false to prevent bulk stalls");		\
+	_FSG_MODULE_PARAM(prefix, params,vendor , ushort,               \
+				"USB Vendor ID");       \
+	_FSG_MODULE_PARAM(prefix, params,product , ushort,              \
+				"USB Product ID");      \
+	_FSG_MODULE_PARAM(prefix, params,vendor_id , charp,             \
+				"USB Vendor ID string");        \
+	_FSG_MODULE_PARAM(prefix, params,product_id , charp,            \
+			"USB Product ID string");       \
+	_FSG_MODULE_PARAM(prefix, params,desp_m , charp,                \
+			"USB descriptor M string");     \
+	_FSG_MODULE_PARAM(prefix, params,desp_p , charp,                \
+			"USB descriptor P string");     \
+	_FSG_MODULE_PARAM(prefix, params,manufacturer , charp,                \
+			"manufacturer");     \
+	_FSG_MODULE_PARAM(prefix, params,SN , charp,            \
+			"Serial NO. string")
+
 
 static void
 fsg_config_from_params(struct fsg_config *cfg,

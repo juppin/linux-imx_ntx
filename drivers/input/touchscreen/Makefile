@@ -6,6 +6,8 @@
 
 wm97xx-ts-y := wm97xx-core.o
 
+da9052-tsi-objs				:= da9052_tsi.o da9052_tsi_filter.o da9052_tsi_calibrate.o
+obj-$(CONFIG_TOUCHSCREEN_DA9052)      	 += da9052-tsi.o
 obj-$(CONFIG_TOUCHSCREEN_88PM860X)	+= 88pm860x-ts.o
 obj-$(CONFIG_TOUCHSCREEN_AD7877)	+= ad7877.o
 obj-$(CONFIG_TOUCHSCREEN_AD7879)	+= ad7879.o
@@ -27,7 +29,6 @@ obj-$(CONFIG_TOUCHSCREEN_FUJITSU)	+= fujitsu_ts.o
 obj-$(CONFIG_TOUCHSCREEN_INEXIO)	+= inexio.o
 obj-$(CONFIG_TOUCHSCREEN_INTEL_MID)	+= intel-mid-touch.o
 obj-$(CONFIG_TOUCHSCREEN_LPC32XX)	+= lpc32xx_ts.o
-obj-$(CONFIG_TOUCHSCREEN_MAX11801)	+= max11801_ts.o
 obj-$(CONFIG_TOUCHSCREEN_MC13783)	+= mc13783_ts.o
 obj-$(CONFIG_TOUCHSCREEN_MCS5000)	+= mcs5000_ts.o
 obj-$(CONFIG_TOUCHSCREEN_MIGOR)		+= migor_ts.o
@@ -43,6 +44,7 @@ obj-$(CONFIG_TOUCHSCREEN_S3C2410)	+= s3c2410_ts.o
 obj-$(CONFIG_TOUCHSCREEN_ST1232)	+= st1232.o
 obj-$(CONFIG_TOUCHSCREEN_STMPE)		+= stmpe-ts.o
 obj-$(CONFIG_TOUCHSCREEN_TNETV107X)	+= tnetv107x-ts.o
+obj-$(CONFIG_TOUCHSCREEN_SYNAPTICS_I2C_RMI)	+= synaptics_i2c_rmi.o
 obj-$(CONFIG_TOUCHSCREEN_TOUCHIT213)	+= touchit213.o
 obj-$(CONFIG_TOUCHSCREEN_TOUCHRIGHT)	+= touchright.o
 obj-$(CONFIG_TOUCHSCREEN_TOUCHWIN)	+= touchwin.o
@@ -59,4 +61,67 @@ obj-$(CONFIG_TOUCHSCREEN_WM97XX_ATMEL)	+= atmel-wm97xx.o
 obj-$(CONFIG_TOUCHSCREEN_WM97XX_MAINSTONE)	+= mainstone-wm97xx.o
 obj-$(CONFIG_TOUCHSCREEN_WM97XX_ZYLONITE)	+= zylonite-wm97xx.o
 obj-$(CONFIG_TOUCHSCREEN_W90X900)	+= w90p910_ts.o
+obj-$(CONFIG_TOUCHSCREEN_P1003)		+= p1003_ts.o
 obj-$(CONFIG_TOUCHSCREEN_TPS6507X)	+= tps6507x-ts.o
+obj-$(CONFIG_TOUCHSCREEN_MAX11801)	+= max11801_ts.o
+obj-$(CONFIG_TOUCHSCREEN_NOVATEK)	+= novatek_ts.o
+obj-$(CONFIG_TOUCHSCREEN_EGALAX)	+= egalax_ts.o
+obj-$(CONFIG_TOUCHSCREEN_ELAN)		+= elan_ts.o
+obj-$(CONFIG_TOUCHSCREEN_ZFORCE)	+= zforce_i2c.o
+obj-$(CONFIG_TOUCHSCREEN_ELAN_TOUCH)	+= elan_touch_i2c.o
+obj-$(CONFIG_TOUCHSCREEN_WACOM_I2C)	+= wacom_i2c.o
+obj-$(CONFIG_MACH_MX6SL_NTX)	+= kl25.o
+obj-$(CONFIG_MACH_MX6SL_NTX)	+= mma8652.o
+obj-$(CONFIG_TOUCHSCREEN_WALTOP_I2C)	+= waltop_i2c.o
+obj-$(CONFIG_TOUCHSCREEN_HANVON_I2C)	+= hanvon_i2c.o
+obj-$(CONFIG_TOUCHSCREEN_CYPRESS_CYTTSP5)	+= cyttsp5.o
+cyttsp5-y := cyttsp5_core.o cyttsp5_mt_common.o
+cyttsp5-$(CONFIG_TOUCHSCREEN_CYPRESS_CYTTSP5_MT_A) += cyttsp5_mta.o
+cyttsp5-$(CONFIG_TOUCHSCREEN_CYPRESS_CYTTSP5_MT_B) += cyttsp5_mtb.o
+cyttsp5-$(CONFIG_TOUCHSCREEN_CYPRESS_CYTTSP5_BUTTON) += cyttsp5_btn.o
+cyttsp5-$(CONFIG_TOUCHSCREEN_CYPRESS_CYTTSP5_PROXIMITY) += cyttsp5_proximity.o
+obj-$(CONFIG_TOUCHSCREEN_CYPRESS_CYTTSP5_DEVICETREE_SUPPORT) += cyttsp5_devtree.o
+ifdef CONFIG_TOUCHSCREEN_CYPRESS_CYTTSP5
+obj-y += cyttsp5_platform.o
+endif
+obj-$(CONFIG_TOUCHSCREEN_CYPRESS_CYTTSP5_I2C)	+= cyttsp5_i2c.o
+obj-$(CONFIG_TOUCHSCREEN_CYPRESS_CYTTSP5_SPI)	+= cyttsp5_spi.o
+obj-$(CONFIG_TOUCHSCREEN_CYPRESS_CYTTSP5_DEBUG_MDL)	+= cyttsp5_debug.o
+obj-$(CONFIG_TOUCHSCREEN_CYPRESS_CYTTSP5_LOADER)	+= cyttsp5_loader.o
+obj-$(CONFIG_TOUCHSCREEN_CYPRESS_CYTTSP5_DEVICE_ACCESS)	+= cyttsp5_device_access.o
+obj-$(CONFIG_TOUCHSCREEN_CYPRESS_CYTTSP5_TEST_DEVICE_ACCESS_API)	+= cyttsp5_test_device_access_api.o
+
+ifeq ($(CONFIG_TOUCHSCREEN_CYPRESS_CYTTSP5_DEBUG),y)
+CFLAGS_cyttsp5_core.o += -DDEBUG
+CFLAGS_cyttsp5_i2c.o += -DDEBUG
+CFLAGS_cyttsp5_spi.o += -DDEBUG
+CFLAGS_cyttsp5_mta.o += -DDEBUG
+CFLAGS_cyttsp5_mtb.o += -DDEBUG
+CFLAGS_cyttsp5_mt_common.o += -DDEBUG
+CFLAGS_cyttsp5_btn.o += -DDEBUG
+CFLAGS_cyttsp5_proximity.o += -DDEBUG
+CFLAGS_cyttsp5_device_access.o += -DDEBUG
+CFLAGS_cyttsp5_loader.o += -DDEBUG
+CFLAGS_cyttsp5_debug.o += -DDEBUG
+CFLAGS_cyttsp5_devtree.o += -DDEBUG
+CFLAGS_cyttsp5_platform.o += -DDEBUG
+endif
+ifeq ($(CONFIG_TOUCHSCREEN_CYPRESS_CYTTSP5_VDEBUG),y)
+CFLAGS_cyttsp5_core.o += -DVERBOSE_DEBUG
+CFLAGS_cyttsp5_i2c.o += -DVERBOSE_DEBUG
+CFLAGS_cyttsp5_spi.o += -DVERBOSE_DEBUG
+CFLAGS_cyttsp5_mta.o += -DVERBOSE_DEBUG
+CFLAGS_cyttsp5_mtb.o += -DVERBOSE_DEBUG
+CFLAGS_cyttsp5_mt_common.o += -DVERBOSE_DEBUG
+CFLAGS_cyttsp5_btn.o += -DVERBOSE_DEBUG
+CFLAGS_cyttsp5_proximity.o += -DVERBOSE_DEBUG
+CFLAGS_cyttsp5_device_access.o += -DVERBOSE_DEBUG
+CFLAGS_cyttsp5_loader.o += -DVERBOSE_DEBUG
+CFLAGS_cyttsp5_debug.o += -DVERBOSE_DEBUG
+CFLAGS_cyttsp5_devtree.o += -DVERBOSE_DEBUG
+CFLAGS_cyttsp5_platform.o += -DVERBOSE_DEBUG
+endif
+obj-$(CONFIG_TOUCHSCREEN_FTS) += fts_ts.o 
+fts_ts-y += focaltech_core.o focaltech_ctl.o focaltech_ex_fun.o focaltech_flash.o 
+# focaltech_gesture.o
+

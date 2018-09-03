@@ -9,6 +9,9 @@
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
  */
+/*
+ * Copyright (C) 2012-2014 Freescale Semiconductor, Inc.
+ */
 
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -64,11 +67,26 @@ static int pwm_backlight_get_brightness(struct backlight_device *bl)
 }
 
 static int pwm_backlight_check_fb(struct backlight_device *bl,
-				  struct fb_info *info)
+					struct fb_info *info)
 {
-	struct pwm_bl_data *pb = dev_get_drvdata(&bl->dev);
+	struct pwm_bl_data *pb = bl_get_data(bl);
+	char *id = info->fix.id;
+	int ret = 0;
 
-	return !pb->check_fb || pb->check_fb(pb->dev, info);
+	if (pb->check_fb) {
+		ret = pb->check_fb(pb->dev, info);
+
+		if (ret)
+			return ret;
+	}
+
+	if (!strcmp(id, "DISP3 BG") ||
+		!strcmp(id, "DISP3 BG - DI1") ||
+		!strcmp(id, "DISP4 BG") ||
+		!strcmp(id, "DISP4 BG - DI1"))
+	    return 1;
+	else
+	return 0;
 }
 
 static const struct backlight_ops pwm_backlight_ops = {
@@ -187,6 +205,15 @@ static int pwm_backlight_resume(struct platform_device *pdev)
 #define pwm_backlight_resume	NULL
 #endif
 
+void  pwm_backlight_shutdown(struct platform_device *pdev)
+{
+	struct backlight_device *bl = platform_get_drvdata(pdev);
+	struct pwm_bl_data *pb = dev_get_drvdata(&bl->dev);
+
+	pwm_config(pb->pwm, 0, pb->period);
+	pwm_disable(pb->pwm);
+}
+
 static struct platform_driver pwm_backlight_driver = {
 	.driver		= {
 		.name	= "pwm-backlight",
@@ -196,6 +223,7 @@ static struct platform_driver pwm_backlight_driver = {
 	.remove		= pwm_backlight_remove,
 	.suspend	= pwm_backlight_suspend,
 	.resume		= pwm_backlight_resume,
+	.shutdown	= pwm_backlight_shutdown,
 };
 
 static int __init pwm_backlight_init(void)

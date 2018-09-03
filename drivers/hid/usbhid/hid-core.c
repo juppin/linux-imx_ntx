@@ -1192,6 +1192,7 @@ static int usbhid_probe(struct usb_interface *intf, const struct usb_device_id *
 			USB_INTERFACE_PROTOCOL_MOUSE)
 		hid->type = HID_TYPE_USBMOUSE;
 
+#if 0
 	if (dev->manufacturer)
 		strlcpy(hid->name, dev->manufacturer, sizeof(hid->name));
 
@@ -1200,7 +1201,16 @@ static int usbhid_probe(struct usb_interface *intf, const struct usb_device_id *
 			strlcat(hid->name, " ", sizeof(hid->name));
 		strlcat(hid->name, dev->product, sizeof(hid->name));
 	}
-
+#else
+	if (dev->manufacturer)
+		printk ("[%s] ===> HID device manufacture : %s\n",__func__, dev->manufacturer);
+	if (dev->product) 
+		printk ("[%s] ===> HID device product : %s\n",__func__, dev->product);
+	if (0x0eef == dev->descriptor.idVendor && 0x0001 == dev->descriptor.idProduct) {
+		printk ("[%s] ===> set HID device name to \"eGalax Inc.\"\n",__func__);
+		strcpy(hid->name, "eGalax Inc.");		
+	}
+#endif
 	if (!strlen(hid->name))
 		snprintf(hid->name, sizeof(hid->name), "HID %04x:%04x",
 			 le16_to_cpu(dev->descriptor.idVendor),

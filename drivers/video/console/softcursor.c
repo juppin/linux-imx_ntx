@@ -28,6 +28,10 @@ int soft_cursor(struct fb_info *info, struct fb_cursor *cursor)
 	struct fb_image *image;
 	u8 *src, *dst;
 
+#ifdef CONFIG_MACH_MX6SL_NTX//[
+	return 0;
+#endif //]CONFIG_MACH_MX6SL_NTX
+
 	if (info->state != FBINFO_STATE_RUNNING)
 		return 0;
 

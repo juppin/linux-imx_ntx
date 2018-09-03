@@ -123,10 +123,14 @@ static const struct snd_kcontrol_new rt5622_vol_snd_controls[] = {
 };
 
 static const struct snd_kcontrol_new alc5623_vol_snd_controls[] = {
-	SOC_DOUBLE_TLV("Line Playback Volume",
+	SOC_DOUBLE_TLV("Speaker Playback Volume",
 			ALC5623_SPK_OUT_VOL, 8, 0, 31, 1, hp_tlv),
-	SOC_DOUBLE("Line Playback Switch",
+	SOC_DOUBLE("Speaker Playback Switch",
 			ALC5623_SPK_OUT_VOL, 15, 7, 1, 1),
+//	SOC_DOUBLE_TLV("Line Playback Volume",
+//			ALC5623_SPK_OUT_VOL, 8, 0, 31, 1, hp_tlv),
+//	SOC_DOUBLE("Line Playback Switch",
+//			ALC5623_SPK_OUT_VOL, 15, 7, 1, 1),
 	SOC_DOUBLE_TLV("Headphone Playback Volume",
 			ALC5623_HP_OUT_VOL, 8, 0, 31, 1, hp_tlv),
 	SOC_DOUBLE("Headphone Playback Switch",
@@ -362,6 +366,8 @@ static const struct snd_soc_dapm_route intercon[] = {
 	{"AuxI Mix", NULL,				"Right AuxI"},
 	{"AUXOUTL", NULL,				"Left AuxOut"},
 	{"AUXOUTR", NULL,				"Right AuxOut"},
+	{"SPKOUT", NULL,				"SpeakerOut"},
+	{"SPKOUTN", NULL,				"SpeakerOut"},
 
 	/* HP mixer */
 	{"HPL Mix", "ADC2HP_L Playback Switch",		"Left Capture Mix"},
@@ -489,31 +495,37 @@ static const struct _pll_div codec_master_pll_div[] = {
 	{ 12000000,  8192000,	0x456b},
 	{ 13000000,  8192000,	0x495f},
 	{ 13100000,  8192000,	0x0320},
+	{ 24000000,  8192000,	0x456b}, 	// MCLK = 24M
 	{  2048000,  11289600,	0xf637},
 	{  3686400,  11289600,	0x2f22},
 	{ 12000000,  11289600,	0x3e2f},
 	{ 13000000,  11289600,	0x4d5b},
 	{ 13100000,  11289600,	0x363b},
+	{ 24000000,  11289600,	0x3e2f}, 	// MCLK = 24M
 	{  2048000,  16384000,	0x1ea0},
 	{  3686400,  16384000,	0x9e27},
 	{ 12000000,  16384000,	0x452b},
 	{ 13000000,  16384000,	0x542f},
 	{ 13100000,  16384000,	0x03a0},
+	{ 24000000,  16384000,	0x452b}, 	// MCLK = 24M
 	{  2048000,  16934400,	0xe625},
 	{  3686400,  16934400,	0x9126},
 	{ 12000000,  16934400,	0x4d2c},
 	{ 13000000,  16934400,	0x742f},
 	{ 13100000,  16934400,	0x3c27},
+	{ 24000000,  16934400,	0x4d2c}, 	// MCLK = 24M
 	{  2048000,  22579200,	0x2aa0},
 	{  3686400,  22579200,	0x2f20},
 	{ 12000000,  22579200,	0x7e2f},
 	{ 13000000,  22579200,	0x742f},
 	{ 13100000,  22579200,	0x3c27},
+	{ 24000000,  22579200,	0x7e2f}, 	// MCLK = 24M
 	{  2048000,  24576000,	0x2ea0},
 	{  3686400,  24576000,	0xee27},
 	{ 12000000,  24576000,	0x2915},
 	{ 13000000,  24576000,	0x772e},
 	{ 13100000,  24576000,	0x0d20},
+	{ 24000000,  24576000,	0x2915}, 	// MCLK = 24M
 };
 
 static const struct _pll_div codec_slave_pll_div[] = {
@@ -535,6 +547,7 @@ static int alc5623_set_dai_pll(struct snd_soc_dai *codec_dai, int pll_id,
 	int gbl_clk = 0, pll_div = 0;
 	u16 reg;
 
+//	printk ("[%s-%d] %d %d %d\n", __func__, __LINE__, pll_id, freq_in,freq_out);
 	if (pll_id < ALC5623_PLL_FR_MCLK || pll_id > ALC5623_PLL_FR_BCK)
 		return -ENODEV;
 
@@ -545,8 +558,10 @@ static int alc5623_set_dai_pll(struct snd_soc_dai *codec_dai, int pll_id,
 
 	/* pll is not used in slave mode */
 	reg = snd_soc_read(codec, ALC5623_DAI_CONTROL);
-	if (reg & ALC5623_DAI_SDP_SLAVE_MODE)
+	if (reg & ALC5623_DAI_SDP_SLAVE_MODE) {
+		printk ("[%s-%d] \n", __func__, __LINE__);
 		return 0;
+		}
 
 	if (!freq_in || !freq_out)
 		return 0;
@@ -580,13 +595,15 @@ static int alc5623_set_dai_pll(struct snd_soc_dai *codec_dai, int pll_id,
 	if (!pll_div)
 		return -EINVAL;
 
-	snd_soc_write(codec, ALC5623_GLOBAL_CLK_CTRL_REG, gbl_clk);
 	snd_soc_write(codec, ALC5623_PLL_CTRL, pll_div);
 	snd_soc_update_bits(codec, ALC5623_PWR_MANAG_ADD2,
 				ALC5623_PWR_ADD2_PLL,
 				ALC5623_PWR_ADD2_PLL);
 	gbl_clk |= ALC5623_GBL_CLK_SYS_SOUR_SEL_PLL;
 	snd_soc_write(codec, ALC5623_GLOBAL_CLK_CTRL_REG, gbl_clk);
+	snd_soc_update_bits(codec, ALC5623_PWR_MANAG_ADD1,
+				ALC5623_PWR_ADD1_MAIN_I2S_EN,
+				ALC5623_PWR_ADD1_MAIN_I2S_EN);
 
 	return 0;
 }
@@ -607,6 +624,7 @@ static const struct _coeff_div coeff_div[] = {
 	{384*2, 0x1c6b},
 	{256*1, 0x0a69},
 	{384*1, 0x0c6b},
+	{544*1, 0x1a69},
 };
 
 static int get_coeff(struct snd_soc_codec *codec, int rate)
@@ -614,6 +632,16 @@ static int get_coeff(struct snd_soc_codec *codec, int rate)
 	struct alc5623_priv *alc5623 = snd_soc_codec_get_drvdata(codec);
 	int i;
 
+//	printk ("[%s-%d] %d %d\n", __func__, __LINE__,rate, alc5623->sysclk, (coeff_div[i].fs / rate));
+	if (24000000 == alc5623->sysclk) {
+		switch (rate) {
+		case 44100:
+			return 8;
+		default:
+			printk ("[%s-%d] undefined rate %d for sysclk %d\n", __func__, __LINE__,rate, alc5623->sysclk);
+			break;
+		}
+	}
 	for (i = 0; i < ARRAY_SIZE(coeff_div); i++) {
 		if (coeff_div[i].fs * rate == alc5623->sysclk)
 			return i;
@@ -630,6 +658,7 @@ static int alc5623_set_dai_sysclk(struct snd_soc_dai *codec_dai,
 	struct snd_soc_codec *codec = codec_dai->codec;
 	struct alc5623_priv *alc5623 = snd_soc_codec_get_drvdata(codec);
 
+//	printk ("[%s-%d] id %d freq %d\n", __func__, __LINE__,clk_id, freq);
 	switch (freq) {
 	case  8192000:
 	case 11289600:
@@ -639,6 +668,7 @@ static int alc5623_set_dai_sysclk(struct snd_soc_dai *codec_dai,
 	case 18432000:
 	case 22579200:
 	case 24576000:
+	case 24000000:
 		alc5623->sysclk = freq;
 		return 0;
 	}
@@ -651,13 +681,17 @@ static int alc5623_set_dai_fmt(struct snd_soc_dai *codec_dai,
 	struct snd_soc_codec *codec = codec_dai->codec;
 	u16 iface = 0;
 
+//	printk ("[%s-%d] \n",__func__, __LINE__);
+
 	/* set master/slave audio interface */
 	switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
 	case SND_SOC_DAIFMT_CBM_CFM:
 		iface = ALC5623_DAI_SDP_MASTER_MODE;
+//		printk ("[%s-%d] ALC5623_DAI_SDP_MASTER_MODE\n", __func__, __LINE__);
 		break;
 	case SND_SOC_DAIFMT_CBS_CFS:
 		iface = ALC5623_DAI_SDP_SLAVE_MODE;
+//		printk ("[%s-%d] ALC5623_DAI_SDP_SLAVE_MODE\n", __func__, __LINE__);
 		break;
 	default:
 		return -EINVAL;
@@ -667,6 +701,7 @@ static int alc5623_set_dai_fmt(struct snd_soc_dai *codec_dai,
 	switch (fmt & SND_SOC_DAIFMT_FORMAT_MASK) {
 	case SND_SOC_DAIFMT_I2S:
 		iface |= ALC5623_DAI_I2S_DF_I2S;
+//		printk ("[%s-%d] ALC5623_DAI_I2S_DF_I2S\n", __func__, __LINE__);
 		break;
 	case SND_SOC_DAIFMT_RIGHT_J:
 		iface |= ALC5623_DAI_I2S_DF_RIGHT;
@@ -687,19 +722,40 @@ static int alc5623_set_dai_fmt(struct snd_soc_dai *codec_dai,
 	/* clock inversion */
 	switch (fmt & SND_SOC_DAIFMT_INV_MASK) {
 	case SND_SOC_DAIFMT_NB_NF:
+//		printk ("[%s-%d] \n", __func__, __LINE__);
 		break;
 	case SND_SOC_DAIFMT_IB_IF:
 		iface |= ALC5623_DAI_MAIN_I2S_BCLK_POL_CTRL;
+//		printk ("[%s-%d] \n", __func__, __LINE__);
 		break;
 	case SND_SOC_DAIFMT_IB_NF:
-		iface |= ALC5623_DAI_MAIN_I2S_BCLK_POL_CTRL;
+//		iface |= ALC5623_DAI_MAIN_I2S_BCLK_POL_CTRL;
+		printk ("[%s-%d] \n", __func__, __LINE__);
 		break;
 	case SND_SOC_DAIFMT_NB_IF:
+//		printk ("[%s-%d] \n", __func__, __LINE__);
 		break;
 	default:
 		return -EINVAL;
 	}
+#if 0
+//	snd_soc_write(codec, 0x3E, 0x8000);// Power on main bias
+//	snd_soc_write(codec, 0x04, 0x8080);// HP L/R mute
+//	snd_soc_write(codec, 0x3A, 0x0100);// Power on softgen
+//	snd_soc_write(codec, 0x3c, 0xB730);// Power on Vref
+//	snd_soc_write(codec, 0x3E, 0x9600);// Power on HP L/R vol
+//	snd_soc_write(codec, 0x5E, 0x0200);// Enable HP depop2
+	// delay > 300 ms
+//	msleep (400);
+//	alc5623_write(codec, 0x0C, 0x0808);// set DAC vol 0db
+//	snd_soc_write(codec, 0x02, 0x0000);// line out vol 0db
+	snd_soc_write(codec, 0x0C, 0x0000);
+//	snd_soc_write(codec, 0x1C, 0xDF00);// set hp vol io select
+//	snd_soc_write(codec, 0x34, 0x0000);// 
+//	snd_soc_write(codec, 0x36, 0x1A69);// 
+#endif
 
+//	printk ("[%s-%d] ALC5623_DAI_CONTROL %X\n", __func__, __LINE__,iface);
 	return snd_soc_write(codec, ALC5623_DAI_CONTROL, iface);
 }
 
@@ -712,6 +768,7 @@ static int alc5623_pcm_hw_params(struct snd_pcm_substream *substream,
 	int coeff, rate;
 	u16 iface;
 
+//	printk ("[%s-%d] \n",__func__, __LINE__);
 	iface = snd_soc_read(codec, ALC5623_DAI_CONTROL);
 	iface &= ~ALC5623_DAI_I2S_DL_MASK;
 
@@ -743,6 +800,8 @@ static int alc5623_pcm_hw_params(struct snd_pcm_substream *substream,
 	coeff = coeff_div[coeff].regvalue;
 	dev_dbg(codec->dev, "%s: sysclk=%d,rate=%d,coeff=0x%04x\n",
 		__func__, alc5623->sysclk, rate, coeff);
+//	printk("%s: sysclk=%d,rate=%d,coeff=0x%04x\n",
+//		__func__, alc5623->sysclk, rate, coeff);
 	snd_soc_write(codec, ALC5623_STEREO_AD_DA_CLK_CTRL, coeff);
 
 	return 0;
@@ -754,13 +813,17 @@ static int alc5623_mute(struct snd_soc_dai *dai, int mute)
 	u16 hp_mute = ALC5623_MISC_M_DAC_L_INPUT | ALC5623_MISC_M_DAC_R_INPUT;
 	u16 mute_reg = snd_soc_read(codec, ALC5623_MISC_CTRL) & ~hp_mute;
 
-	if (mute)
+	if (mute) {
 		mute_reg |= hp_mute;
-
-	return snd_soc_write(codec, ALC5623_MISC_CTRL, mute_reg);
+		return snd_soc_write(codec, ALC5623_MISC_CTRL, mute_reg);
+	}
+	else {
+		return snd_soc_write(codec, ALC5623_MISC_CTRL, mute_reg);
+	}
 }
 
 #define ALC5623_ADD2_POWER_EN (ALC5623_PWR_ADD2_VREF \
+	| ALC5623_PWR_ADD2_LINEOUT \
 	| ALC5623_PWR_ADD2_DAC_REF_CIR)
 
 #define ALC5623_ADD3_POWER_EN (ALC5623_PWR_ADD3_MAIN_BIAS \
@@ -783,7 +846,8 @@ static void enable_power_depop(struct snd_soc_codec *codec)
 				ALC5623_PWR_ADD1_SOFTGEN_EN,
 				ALC5623_PWR_ADD1_SOFTGEN_EN);
 
-	snd_soc_write(codec, ALC5623_PWR_MANAG_ADD3, ALC5623_ADD3_POWER_EN);
+	snd_soc_update_bits(codec, ALC5623_PWR_MANAG_ADD3, 
+				ALC5623_ADD3_POWER_EN, ALC5623_ADD3_POWER_EN);
 
 	snd_soc_update_bits(codec, ALC5623_MISC_CTRL,
 				ALC5623_MISC_HP_DEPOP_MODE2_EN,
@@ -791,15 +855,16 @@ static void enable_power_depop(struct snd_soc_codec *codec)
 
 	msleep(500);
 
-	snd_soc_write(codec, ALC5623_PWR_MANAG_ADD2, ALC5623_ADD2_POWER_EN);
+	snd_soc_update_bits(codec, ALC5623_PWR_MANAG_ADD2, 
+				ALC5623_ADD2_POWER_EN, ALC5623_ADD2_POWER_EN);
 
 	/* avoid writing '1' into 5622 reserved bits */
 	if (alc5623->id == 0x22)
-		snd_soc_write(codec, ALC5623_PWR_MANAG_ADD1,
-			ALC5623_ADD1_POWER_EN_5622);
+		snd_soc_update_bits(codec, ALC5623_PWR_MANAG_ADD1,
+			ALC5623_ADD1_POWER_EN_5622, ALC5623_ADD1_POWER_EN_5622);
 	else
-		snd_soc_write(codec, ALC5623_PWR_MANAG_ADD1,
-			ALC5623_ADD1_POWER_EN);
+		snd_soc_update_bits(codec, ALC5623_PWR_MANAG_ADD1,
+			ALC5623_ADD1_POWER_EN, ALC5623_ADD1_POWER_EN);
 
 	/* disable HP Depop2 */
 	snd_soc_update_bits(codec, ALC5623_MISC_CTRL,
@@ -819,10 +884,10 @@ static int alc5623_set_bias_level(struct snd_soc_codec *codec,
 		break;
 	case SND_SOC_BIAS_STANDBY:
 		/* everything off except vref/vmid, */
-		snd_soc_write(codec, ALC5623_PWR_MANAG_ADD2,
-				ALC5623_PWR_ADD2_VREF);
-		snd_soc_write(codec, ALC5623_PWR_MANAG_ADD3,
-				ALC5623_PWR_ADD3_MAIN_BIAS);
+		snd_soc_update_bits(codec, ALC5623_PWR_MANAG_ADD2,
+				ALC5623_PWR_ADD2_VREF, ALC5623_PWR_ADD2_VREF);
+		snd_soc_update_bits(codec, ALC5623_PWR_MANAG_ADD3,
+				ALC5623_PWR_ADD3_MAIN_BIAS, ALC5623_PWR_ADD3_MAIN_BIAS);
 		break;
 	case SND_SOC_BIAS_OFF:
 		/* everything off, dac mute, inactive */

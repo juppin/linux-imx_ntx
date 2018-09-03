@@ -1032,24 +1032,43 @@ fb_set_var(struct fb_info *info, struct fb_var_screeninfo *var)
 int
 fb_blank(struct fb_info *info, int blank)
 {	
- 	int ret = -EINVAL;
+	struct fb_event event;
+	int ret = -EINVAL, early_ret;
 
  	if (blank > FB_BLANK_POWERDOWN)
  		blank = FB_BLANK_POWERDOWN;
 
+	event.info = info;
+	event.data = &blank;
+
+	early_ret = fb_notifier_call_chain(FB_EARLY_EVENT_BLANK, &event);
+
 	if (info->fbops->fb_blank)
  		ret = info->fbops->fb_blank(blank, info);
 
- 	if (!ret) {
-		struct fb_event event;
-
-		event.info = info;
-		event.data = &blank;
+	if (!ret)
 		fb_notifier_call_chain(FB_EVENT_BLANK, &event);
+	else {
+		/*
+		 * if fb_blank is failed then revert effects of
+		 * the early blank event.
+		 */
+		if (!early_ret)
+			fb_notifier_call_chain(FB_R_EARLY_EVENT_BLANK, &event);
 	}
 
  	return ret;
 }
+
+#ifdef CONFIG_MACH_MX6SL_NTX//[
+#define _FORCE_REPORT_4BIT	1
+#endif//]CONFIG_MACH_MX6SL_NTX
+
+#ifdef _FORCE_REPORT_4BIT //[
+#include "mxc/ntx_hwconfig.h"
+extern volatile NTX_HWCONFIG *gptHWCFG;
+#endif //] _FORCE_REPORT_4BIT
+
 
 static long do_fb_ioctl(struct fb_info *info, unsigned int cmd,
 			unsigned long arg)
@@ -1072,6 +1091,84 @@ static long do_fb_ioctl(struct fb_info *info, unsigned int cmd,
 		unlock_fb_info(info);
 
 		ret = copy_to_user(argp, &var, sizeof(var)) ? -EFAULT : 0;
+		#ifdef _FORCE_REPORT_4BIT //[ gallen test .
+		{
+			if( gptHWCFG ) {
+
+			    printk("FBIOGET_VSCREENINFO: bUIStyle=%d bDisplayResolution=%d\n",
+					gptHWCFG->m_val.bUIStyle,
+					gptHWCFG->m_val.bDisplayResolution
+					);
+
+			    if ( ((0==gptHWCFG->m_val.bUIStyle) ||(2==gptHWCFG->m_val.bUIStyle)) ) {
+				struct fb_var_screeninfo *pvar;
+				
+				pvar=(struct fb_var_screeninfo *)(argp);
+				
+				pvar->bits_per_pixel = 4;
+				pvar->grayscale = 1;
+				pvar->red.offset=0;
+				pvar->red.length=4;
+				pvar->green.offset=0;
+				pvar->green.length=4;
+				pvar->blue.offset=0;
+				pvar->blue.length=4;
+				if (1==gptHWCFG->m_val.bDisplayResolution) {
+					pvar->xres_virtual = 758;
+					pvar->yres_virtual = 1024;
+					pvar->xres = 758;
+					pvar->yres = 1024;
+				}
+				else if (3==gptHWCFG->m_val.bDisplayResolution) {
+					pvar->xres_virtual = 1080;
+					pvar->yres_virtual = 1440;
+					pvar->xres = 1080;
+					pvar->yres = 1440;
+				}
+				else if (5==gptHWCFG->m_val.bDisplayResolution) {
+					pvar->xres_virtual = 1472;
+					pvar->yres_virtual = 3456;
+					pvar->xres = 1448;
+					pvar->yres = 1072;
+					pvar->width= 121;
+					pvar->height = 89;
+					pvar->red.offset=11;
+					pvar->red.length=5;
+					pvar->green.offset=5;
+					pvar->green.length=6;
+					pvar->blue.offset=0;
+					pvar->green.length=5;
+					pvar->bits_per_pixel=16;
+				}
+				else if (6==gptHWCFG->m_val.bDisplayResolution) {
+					pvar->xres_virtual = 1200;
+					pvar->yres_virtual = 1600;
+					pvar->xres = 1200;
+					pvar->yres = 1600;
+				}
+				else if (8==gptHWCFG->m_val.bDisplayResolution) {
+					pvar->xres_virtual = 1404;
+					pvar->yres_virtual = 1872;
+					pvar->xres = 1404;
+					pvar->yres = 1872;
+				}
+				else if (2==gptHWCFG->m_val.bDisplayResolution) {
+					pvar->xres_virtual = 768;
+					pvar->yres_virtual = 1024;
+					pvar->xres = 768;
+					pvar->yres = 1024;
+				}
+				else {
+					pvar->xres_virtual = 600;
+					pvar->yres_virtual = 800;
+					pvar->xres = 600;
+					pvar->yres = 800;
+				}
+			    }
+			}
+		}
+		#endif//]_FORCE_REPORT_4BIT
+
 		break;
 	case FBIOPUT_VSCREENINFO:
 		if (copy_from_user(&var, argp, sizeof(var)))
@@ -1573,6 +1670,7 @@ static int do_register_framebuffer(struct fb_info *fb_info)
 	struct fb_event event;
 	struct fb_videomode mode;
 
+
 	if (fb_check_foreignness(fb_info))
 		return -ENOSYS;
 
@@ -1630,6 +1728,7 @@ static int do_register_framebuffer(struct fb_info *fb_info)
 		return -ENODEV;
 	fb_notifier_call_chain(FB_EVENT_FB_REGISTERED, &event);
 	unlock_fb_info(fb_info);
+
 	return 0;
 }
 

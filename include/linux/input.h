@@ -129,6 +129,9 @@ struct input_keymap_entry {
 
 #define EVIOCGRAB		_IOW('E', 0x90, int)			/* Grab/Release device */
 
+#define EVIOCGSUSPENDBLOCK	_IOR('E', 0x91, int)			/* get suspend block enable */
+#define EVIOCSSUSPENDBLOCK	_IOW('E', 0x91, int)			/* set suspend block enable */
+
 /*
  * Device properties and quirks
  */
@@ -437,6 +440,13 @@ struct input_keymap_entry {
 
 #define KEY_WIMAX		246
 #define KEY_RFKILL		247	/* Key that controls all radios */
+
+#define KEY_TAP			248
+#define KEY_DOUBLETAP		249
+#define KEY_SHAKELEFT		250
+#define KEY_SHAKERIGHT		251
+#define KEY_SHAKEFORWARD	252
+#define KEY_SHAKEBACKWARD	253
 
 /* Code 255 is reserved for special needs of AT keyboard driver */
 
@@ -826,6 +836,28 @@ struct input_keymap_entry {
 #define MSC_SCAN		0x04
 #define MSC_MAX			0x07
 #define MSC_CNT			(MSC_MAX+1)
+
+/*
+ * Netronix Misc RAW event values .
+ * 0x0X - EPD
+ * 0x1X - ALS
+ */ 
+#define MSC_RAW_EPD_DCDC1_ERROR		0x01
+#define MSC_RAW_EPD_DCDC2_ERROR		0x02
+#define MSC_RAW_EPD_VEE_ERROR		0x03
+#define MSC_RAW_EPD_VCOM_ERROR		0x04
+#define MSC_RAW_EPD_VPOS_ERROR		0x05
+#define MSC_RAW_EPD_VNEG_ERROR		0x06
+#define MSC_RAW_EPD_VDDH_ERROR		0x07
+#define MSC_RAW_EPD_OVT_ERROR		0x08 // over-temperature .
+#define MSC_RAW_EPD_UNKOWN_ERROR	0x09 // .
+
+#define MSC_RAW_ALS_EXIT_WINDOW		0x11
+#define MSC_RAW_ALS_ENTER_WINDOW	0x12
+#define MSC_RAW_ALS_PS1			0x13
+#define MSC_RAW_ALS_PS2			0x14
+#define MSC_RAW_ALS_PS3			0x15
+#define MSC_RAW_ALS_CMD			0x16
 
 /*
  * LEDs
@@ -1474,6 +1506,11 @@ void input_inject_event(struct input_handle *handle, unsigned int type, unsigned
 static inline void input_report_key(struct input_dev *dev, unsigned int code, int value)
 {
 	input_event(dev, EV_KEY, code, !!value);
+}
+
+static inline void input_report_zforcekey(struct input_dev *dev, unsigned int code, int value)
+{
+	input_event(dev, EV_KEY, code, value);
 }
 
 static inline void input_report_rel(struct input_dev *dev, unsigned int code, int value)
